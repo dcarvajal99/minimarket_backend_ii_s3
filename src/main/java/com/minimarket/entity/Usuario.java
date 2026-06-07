@@ -1,5 +1,7 @@
 package com.minimarket.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import java.util.Set;
 
@@ -12,6 +14,9 @@ public class Usuario {
     @Column(nullable = false, unique = true)
     private String username;
 
+    // La contrasena (hash BCrypt) nunca debe salir en las respuestas JSON:
+    // se acepta al crear/actualizar (WRITE_ONLY) pero no se serializa de vuelta.
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     @Column(nullable = false)
     private String password;
 
