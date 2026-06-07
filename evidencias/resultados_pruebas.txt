@@ -31,3 +31,7 @@ Fecha de ejecucion: 2026-06-07
 [Headers] X-Content-Type-Options: nosniff | X-Frame-Options: SAMEORIGIN | Content-Security-Policy: default-src 'self'
 [SQLi] Consultas via Spring Data JPA parametrizadas (findByUsername, findByNombre) -> no concatenacion de SQL.
 [CSRF] Deshabilitado por diseno: API stateless con token Bearer, sin cookies de sesion.
+
+=== NOTA SOBRE CAPTURAS ===
+Las capturas de pantalla deben tomarse desde Swagger UI (http://localhost:8080/swagger-ui/index.html)
+y desde la consola H2, ejecutando la app con: ./mvnw spring-boot:run

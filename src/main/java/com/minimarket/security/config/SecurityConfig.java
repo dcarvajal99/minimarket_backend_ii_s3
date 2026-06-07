@@ -52,9 +52,10 @@ public class SecurityConfig {
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // Endpoints publicos: login y consola H2 (solo desarrollo).
+                        // Endpoints publicos: login, consola H2 y documentacion Swagger (desarrollo).
                         .requestMatchers("/api/auth/**", "/public/**").permitAll()
                         .requestMatchers("/h2-console/**").permitAll()
+                        .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         // La gestion de usuarios queda reservada al rol ADMIN.
                         .requestMatchers("/api/usuarios/**").hasRole("ADMIN")
                         // El resto de la API requiere autenticacion (control fino via @PreAuthorize).
