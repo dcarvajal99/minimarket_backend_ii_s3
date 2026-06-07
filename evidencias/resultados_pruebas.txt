@@ -1,0 +1,24 @@
+RESULTADOS DE PRUEBAS DE SEGURIDAD - MiniMarket Plus (Semana 3)
+Fecha de ejecucion: 2026-06-07
+
+[1] Login admin -> respuesta JSON:
+{
+    "token": "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJhZG1pbiIsInJvbGVzIjpbIlJPTEVfQURNSU4iXSwiaWF0IjoxNzgwODEzOTI0LCJleHAiOjE3ODA4MTc1MjR9.S1m5QCukfHXAHtqL-dLbJoNMF4U3IZrUrX_T9OTiQykXHLB2nzUfiTLxYDpm846fY7GB8wt0ib0WbS4qz4Mwnw",
+    "username": "admin",
+    "roles": [
+        "ROLE_ADMIN"
+    ],
+    "tipo": "Bearer"
+}
+
+[2] Matriz de pruebas (codigo HTTP observado):
+ - GET  /api/productos  SIN token .................... 403 (acceso denegado)
+ - POST /api/auth/login admin/admin123 ............... 200 (token emitido)
+ - POST /api/auth/login admin/wrong .................. 401 (credenciales invalidas)
+ - GET  /api/productos  token ADMIN ................. 200 (autorizado)
+ - GET  /api/usuarios   token ADMIN ................. 200 (autorizado)
+ - GET  /api/productos  token CLIENTE (lectura) .... 200 (autorizado)
+ - POST /api/productos  token CLIENTE (escritura) .. 403 (rol insuficiente)
+ - GET  /api/usuarios   token CLIENTE ............... 403 (solo ADMIN)
+ - GET  /api/inventario token CLIENTE ............... 403 (solo interno)
+ - GET  /api/productos  token alterado ............. 403 (firma JWT invalida)
