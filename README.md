@@ -45,6 +45,19 @@ Componentes clave (paquete `com.minimarket.security`):
 - **`model/CustomUserDetails`, `LoginRequest`, `LoginResponse`** — modelos de apoyo.
 - **`controller/AuthController`** — endpoint `POST /api/auth/login`.
 - **`config/DataLoader`** — siembra roles y usuarios con contraseñas BCrypt.
+- **`security/xss/*`** + **`config/JacksonConfig`** — sanitización anti-XSS con jsoup.
+- **`config/GlobalExceptionHandler`** — respuestas 400 limpias ante validación.
+
+## Protección contra amenazas comunes
+
+| Amenaza | Mecanismo implementado |
+|---|---|
+| **SQL Injection** | Spring Data JPA con consultas parametrizadas (`findByUsername`, `findByNombre`). No se concatena SQL. |
+| **XSS** | Sanitización global con **jsoup** (`Safelist.none()`) vía deserializer Jackson: todo String del JSON entrante se limpia. Cabeceras `X-Content-Type-Options` y `Content-Security-Policy`. |
+| **CSRF** | Deshabilitado por diseño: API stateless con token Bearer, sin cookies de sesión (CSRF no aplica). |
+| **Clickjacking** | Cabecera `X-Frame-Options: SAMEORIGIN`. |
+| **Robo de credenciales** | Contraseñas con hash BCrypt; token firmado HMAC-SHA con expiración. HSTS para forzar HTTPS en producción. |
+| **Datos malformados** | Bean Validation (`@NotBlank`, `@Positive`…) + `@Valid`, con manejador global de errores. |
 
 ## Roles y usuarios de prueba
 

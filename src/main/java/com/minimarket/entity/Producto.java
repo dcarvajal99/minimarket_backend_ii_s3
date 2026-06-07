@@ -1,6 +1,11 @@
 package com.minimarket.entity;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
 
 @Entity
 public class Producto {
@@ -8,12 +13,18 @@ public class Producto {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @NotBlank(message = "El nombre del producto es obligatorio")
+    @Size(max = 100, message = "El nombre no puede superar los 100 caracteres")
     @Column(nullable = false)
     private String nombre;
 
+    @NotNull(message = "El precio es obligatorio")
+    @Positive(message = "El precio debe ser mayor que cero")
     @Column(nullable = false)
     private Double precio;
 
+    @NotNull(message = "El stock es obligatorio")
+    @PositiveOrZero(message = "El stock no puede ser negativo")
     @Column(nullable = false)
     private Integer stock;
 

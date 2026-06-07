@@ -60,8 +60,20 @@ public class SecurityConfig {
                         // El resto de la API requiere autenticacion (control fino via @PreAuthorize).
                         .anyRequest().authenticated()
                 )
-                // Permite que la consola H2 se renderice dentro de un frame.
-                .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()));
+                // Cabeceras de seguridad HTTP (defensa contra XSS, clickjacking y sniffing).
+                .headers(headers -> headers
+                        // Permite que la consola H2 se renderice dentro de un frame del mismo origen.
+                        .frameOptions(frame -> frame.sameOrigin())
+                        // Evita que el navegador "adivine" el tipo de contenido (anti MIME-sniffing).
+                        .contentTypeOptions(cto -> {})
+                        // Content-Security-Policy: restringe el origen de los recursos (mitiga XSS).
+                        .contentSecurityPolicy(csp ->
+                                csp.policyDirectives("default-src 'self'; frame-ancestors 'self'"))
+                        // HSTS: fuerza HTTPS en navegadores compatibles (relevante en produccion).
+                        .httpStrictTransportSecurity(hsts -> hsts
+                                .includeSubDomains(true)
+                                .maxAgeInSeconds(31536000))
+                );
 
         // Provider de autenticacion basado en BD + BCrypt.
         http.authenticationProvider(authenticationProvider());

@@ -22,3 +22,12 @@ Fecha de ejecucion: 2026-06-07
  - GET  /api/usuarios   token CLIENTE ............... 403 (solo ADMIN)
  - GET  /api/inventario token CLIENTE ............... 403 (solo interno)
  - GET  /api/productos  token alterado ............. 403 (firma JWT invalida)
+
+=== PRUEBAS DE PROTECCION CONTRA AMENAZAS (XSS / Validacion / Headers) ===
+[XSS] POST /api/categorias nombre='<script>alert(1)</script>Bebidas'
+      -> guardado como 'Bebidas' (jsoup removio el script). Mitigado.
+[Validacion] POST /api/productos {nombre:'', precio:-5, stock:-2} -> HTTP 400
+      -> respuesta: {precio:'...mayor que cero', stock:'...no negativo', nombre:'...obligatorio'}
+[Headers] X-Content-Type-Options: nosniff | X-Frame-Options: SAMEORIGIN | Content-Security-Policy: default-src 'self'
+[SQLi] Consultas via Spring Data JPA parametrizadas (findByUsername, findByNombre) -> no concatenacion de SQL.
+[CSRF] Deshabilitado por diseno: API stateless con token Bearer, sin cookies de sesion.
