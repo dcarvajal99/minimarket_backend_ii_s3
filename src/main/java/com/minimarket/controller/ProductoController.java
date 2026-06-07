@@ -4,6 +4,7 @@ import com.minimarket.entity.Producto;
 import com.minimarket.service.ProductoService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -15,23 +16,29 @@ public class ProductoController {
     @Autowired
     private ProductoService productoService;
 
+    // Consulta de catalogo: disponible para cualquier usuario autenticado.
     @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'EMPLEADO', 'CLIENTE')")
     public List<Producto> listarProductos() {
         return productoService.findAll();
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'EMPLEADO', 'CLIENTE')")
     public ResponseEntity<Producto> obtenerProductoPorId(@PathVariable Long id) {
         Producto producto = productoService.findById(id);
         return (producto != null) ? ResponseEntity.ok(producto) : ResponseEntity.notFound().build();
     }
 
+    // Alta/edicion/baja de productos: reservado al personal interno.
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'EMPLEADO')")
     public Producto guardarProducto(@RequestBody Producto producto) {
         return productoService.save(producto);
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'EMPLEADO')")
     public ResponseEntity<Producto> actualizarProducto(@PathVariable Long id, @RequestBody Producto producto) {
         Producto productoExistente = productoService.findById(id);
         if (productoExistente != null) {
@@ -42,6 +49,7 @@ public class ProductoController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'EMPLEADO')")
     public ResponseEntity<Void> eliminarProducto(@PathVariable Long id) {
         Producto producto = productoService.findById(id);
         if (producto != null) {

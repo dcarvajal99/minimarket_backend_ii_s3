@@ -5,6 +5,7 @@ import com.minimarket.service.InventarioService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.List;
 
@@ -15,22 +16,28 @@ public class InventarioController {
     @Autowired
     private InventarioService inventarioService;
 
+    // Inventario: operacion interna (ADMIN/EMPLEADO)
+    @PreAuthorize("hasAnyRole('ADMIN', 'EMPLEADO')")
     @GetMapping
     public List<Inventario> listarMovimientosDeInventario() {
         return inventarioService.findAll();
     }
 
+    // Inventario: operacion interna (ADMIN/EMPLEADO)
+    @PreAuthorize("hasAnyRole('ADMIN', 'EMPLEADO')")
     @GetMapping("/{id}")
     public ResponseEntity<Inventario> obtenerMovimientoPorId(@PathVariable Long id) {
         Inventario inventario = inventarioService.findById(id);
         return (inventario != null) ? ResponseEntity.ok(inventario) : ResponseEntity.notFound().build();
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN', 'EMPLEADO')")
     @PostMapping
     public Inventario registrarMovimiento(@RequestBody Inventario inventario) {
         return inventarioService.save(inventario);
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN', 'EMPLEADO')")
     @PutMapping("/{id}")
     public ResponseEntity<Inventario> actualizarMovimiento(@PathVariable Long id, @RequestBody Inventario inventario) {
         Inventario existente = inventarioService.findById(id);
@@ -41,6 +48,7 @@ public class InventarioController {
         return ResponseEntity.notFound().build();
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN', 'EMPLEADO')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminarMovimiento(@PathVariable Long id) {
         Inventario inventario = inventarioService.findById(id);

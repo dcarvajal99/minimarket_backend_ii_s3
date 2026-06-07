@@ -4,13 +4,20 @@ import com.minimarket.entity.Usuario;
 import com.minimarket.service.UsuarioService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Gestion de usuarios. Toda la administracion de cuentas queda restringida al
+ * rol ADMIN, tanto a nivel de URL (SecurityConfig) como de metodo (@PreAuthorize),
+ * aplicando defensa en profundidad.
+ */
 @RestController
 @RequestMapping("/api/usuarios")
+@PreAuthorize("hasRole('ADMIN')")
 public class UsuarioController {
 
     @Autowired
