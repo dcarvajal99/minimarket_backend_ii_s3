@@ -46,7 +46,23 @@ Componentes clave (paquete `com.minimarket.security`):
 - **`controller/AuthController`** — endpoint `POST /api/auth/login`.
 - **`config/DataLoader`** — siembra roles y usuarios con contraseñas BCrypt.
 - **`security/xss/*`** + **`config/JacksonConfig`** — sanitización anti-XSS con jsoup.
-- **`config/GlobalExceptionHandler`** — respuestas 400 limpias ante validación.
+
+## Arquitectura de capas y buenas prácticas
+
+La API sigue una arquitectura por capas con separación estricta entidad/DTO:
+
+- **DTOs (`dto/<entidad>/`)** — cada entidad expone un `*Request` (entrada, con
+  Bean Validation) y un `*Response` (salida, aplanado para no exponer la entidad
+  JPA ni provocar recursión). Un `*Mapper` centraliza la conversión. Las
+  entidades JPA nunca se reciben ni devuelven directamente en los controladores.
+- **Respuestas uniformes** — toda operación exitosa se envuelve en
+  `dto/ApiResponse` (`success`, `message`, `data`, `timestamp`); los errores se
+  devuelven como `dto/ErrorResponse` (`status`, `error`, `message`, `path`,
+  `timestamp`, `validationErrors`).
+- **Manejo global de excepciones** — `exception/GlobalExceptionHandler`
+  (`@RestControllerAdvice`) traduce a un formato uniforme: 404
+  (`ResourceNotFoundException`), 400 (validación / argumentos), 401
+  (credenciales), 403 (acceso denegado) y 500 (genérico), sin filtrar trazas.
 
 ## Protección contra amenazas comunes
 

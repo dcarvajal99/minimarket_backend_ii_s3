@@ -1,62 +1,119 @@
 package com.minimarket.controller;
 
+import com.minimarket.dto.ApiResponse;
+import com.minimarket.dto.detalleventa.DetalleVentaMapper;
+import com.minimarket.dto.detalleventa.DetalleVentaRequest;
+import com.minimarket.dto.detalleventa.DetalleVentaResponse;
 import com.minimarket.entity.DetalleVenta;
+import com.minimarket.entity.Producto;
+import com.minimarket.entity.Venta;
+import com.minimarket.exception.ResourceNotFoundException;
 import com.minimarket.service.DetalleVentaService;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.minimarket.service.ProductoService;
+import com.minimarket.service.VentaService;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * API REST de detalles de venta. Trabaja con DTOs
+ * (DetalleVentaRequest/DetalleVentaResponse), delega la logica al servicio y
+ * devuelve respuestas uniformes ApiResponse.
+ */
 @RestController
 @RequestMapping("/api/detalle-ventas")
 public class DetalleVentaController {
 
-    @Autowired
-    private DetalleVentaService detalleVentaService;
+    private final DetalleVentaService detalleVentaService;
+    private final VentaService ventaService;
+    private final ProductoService productoService;
 
-    // Detalle de venta: usuario autenticado
-    @PreAuthorize("hasAnyRole('ADMIN', 'EMPLEADO', 'CLIENTE')")
+    public DetalleVentaController(DetalleVentaService detalleVentaService,
+                                  VentaService ventaService,
+                                  ProductoService productoService) {
+        this.detalleVentaService = detalleVentaService;
+        this.ventaService = ventaService;
+        this.productoService = productoService;
+    }
+
+    // Consulta de detalles: disponible para cualquier usuario autenticado.
     @GetMapping
-    public List<DetalleVenta> listarDetalleVentas() {
-        return detalleVentaService.findAll();
+    @PreAuthorize("hasAnyRole('ADMIN', 'EMPLEADO', 'CLIENTE')")
+    public ResponseEntity<ApiResponse<List<DetalleVentaResponse>>> listar() {
+        List<DetalleVentaResponse> data = detalleVentaService.findAll().stream()
+                .map(DetalleVentaMapper::toResponse)
+                .toList();
+        return ResponseEntity.ok(ApiResponse.ok("Detalles de venta obtenidos", data));
     }
 
-    // Detalle de venta: usuario autenticado
-    @PreAuthorize("hasAnyRole('ADMIN', 'EMPLEADO', 'CLIENTE')")
     @GetMapping("/{id}")
-    public ResponseEntity<DetalleVenta> obtenerDetalleVentaPorId(@PathVariable Long id) {
-        DetalleVenta detalleVenta = detalleVentaService.findById(id);
-        return (detalleVenta != null) ? ResponseEntity.ok(detalleVenta) : ResponseEntity.notFound().build();
-    }
-
     @PreAuthorize("hasAnyRole('ADMIN', 'EMPLEADO', 'CLIENTE')")
+    public ResponseEntity<ApiResponse<DetalleVentaResponse>> obtenerPorId(@PathVariable Long id) {
+        DetalleVenta detalle = detalleVentaService.findById(id);
+        if (detalle == null) {
+            throw new ResourceNotFoundException("DetalleVenta", id);
+        }
+        return ResponseEntity.ok(ApiResponse.ok("Detalle de venta encontrado",
+                DetalleVentaMapper.toResponse(detalle)));
+    }
+
+    // Alta de detalle: cliente o personal interno.
     @PostMapping
-    public DetalleVenta guardarDetalleVenta(@RequestBody DetalleVenta detalleVenta) {
-        return detalleVentaService.save(detalleVenta);
+    @PreAuthorize("hasAnyRole('ADMIN', 'EMPLEADO', 'CLIENTE')")
+    public ResponseEntity<ApiResponse<DetalleVentaResponse>> crear(@Valid @RequestBody DetalleVentaRequest req) {
+        Venta venta = resolverVenta(req.getVentaId());
+        Producto producto = resolverProducto(req.getProductoId());
+        DetalleVenta guardado = detalleVentaService.save(DetalleVentaMapper.toEntity(req, venta, producto));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.ok("Detalle de venta creado", DetalleVentaMapper.toResponse(guardado)));
     }
 
-    // Modificacion de detalle: solo personal interno
-    @PreAuthorize("hasAnyRole('ADMIN', 'EMPLEADO')")
+    // Modificacion de detalle: solo personal interno.
     @PutMapping("/{id}")
-    public ResponseEntity<DetalleVenta> actualizarDetalleVenta(@PathVariable Long id, @RequestBody DetalleVenta detalleVenta) {
+    @PreAuthorize("hasAnyRole('ADMIN', 'EMPLEADO')")
+    public ResponseEntity<ApiResponse<DetalleVentaResponse>> actualizar(@PathVariable Long id,
+                                                                        @Valid @RequestBody DetalleVentaRequest req) {
         DetalleVenta existente = detalleVentaService.findById(id);
-        if (existente != null) {
-            detalleVenta.setId(id);
-            return ResponseEntity.ok(detalleVentaService.save(detalleVenta));
+        if (existente == null) {
+            throw new ResourceNotFoundException("DetalleVenta", id);
         }
-        return ResponseEntity.notFound().build();
+        Venta venta = resolverVenta(req.getVentaId());
+        Producto producto = resolverProducto(req.getProductoId());
+        DetalleVenta actualizado = DetalleVentaMapper.toEntity(req, venta, producto);
+        actualizado.setId(id);
+        return ResponseEntity.ok(ApiResponse.ok("Detalle de venta actualizado",
+                DetalleVentaMapper.toResponse(detalleVentaService.save(actualizado))));
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN', 'EMPLEADO')")
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> eliminarDetalleVenta(@PathVariable Long id) {
-        DetalleVenta detalleVenta = detalleVentaService.findById(id);
-        if (detalleVenta != null) {
-            detalleVentaService.deleteById(id);
-            return ResponseEntity.noContent().build();
+    @PreAuthorize("hasAnyRole('ADMIN', 'EMPLEADO')")
+    public ResponseEntity<ApiResponse<Void>> eliminar(@PathVariable Long id) {
+        if (detalleVentaService.findById(id) == null) {
+            throw new ResourceNotFoundException("DetalleVenta", id);
         }
-        return ResponseEntity.notFound().build();
+        detalleVentaService.deleteById(id);
+        return ResponseEntity.ok(ApiResponse.ok("Detalle de venta eliminado", null));
+    }
+
+    /** Resuelve la venta por id o lanza 404 si no existe. */
+    private Venta resolverVenta(Long ventaId) {
+        Venta venta = ventaService.findById(ventaId);
+        if (venta == null) {
+            throw new ResourceNotFoundException("Venta", ventaId);
+        }
+        return venta;
+    }
+
+    /** Resuelve el producto por id o lanza 404 si no existe. */
+    private Producto resolverProducto(Long productoId) {
+        Producto producto = productoService.findById(productoId);
+        if (producto == null) {
+            throw new ResourceNotFoundException("Producto", productoId);
+        }
+        return producto;
     }
 }

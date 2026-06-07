@@ -1,62 +1,104 @@
 package com.minimarket.controller;
 
+import com.minimarket.dto.ApiResponse;
+import com.minimarket.dto.usuario.UsuarioMapper;
+import com.minimarket.dto.usuario.UsuarioRequest;
+import com.minimarket.dto.usuario.UsuarioResponse;
+import com.minimarket.entity.Rol;
 import com.minimarket.entity.Usuario;
+import com.minimarket.exception.ResourceNotFoundException;
+import com.minimarket.service.RolService;
 import com.minimarket.service.UsuarioService;
-import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
+import java.util.Set;
 
 /**
- * Gestion de usuarios. Toda la administracion de cuentas queda restringida al
- * rol ADMIN, tanto a nivel de URL (SecurityConfig) como de metodo (@PreAuthorize),
- * aplicando defensa en profundidad.
+ * Gestion de usuarios. Trabaja con DTOs (UsuarioRequest/UsuarioResponse), cifra
+ * la contrasena con BCrypt y nunca la expone. Toda la administracion de cuentas
+ * queda restringida al rol ADMIN, tanto a nivel de URL (SecurityConfig) como de
+ * clase (@PreAuthorize), aplicando defensa en profundidad.
  */
 @RestController
 @RequestMapping("/api/usuarios")
 @PreAuthorize("hasRole('ADMIN')")
 public class UsuarioController {
 
-    @Autowired
-    private UsuarioService usuarioService;
+    private final UsuarioService usuarioService;
+    private final RolService rolService;
+    private final PasswordEncoder passwordEncoder;
+
+    public UsuarioController(UsuarioService usuarioService, RolService rolService,
+                            PasswordEncoder passwordEncoder) {
+        this.usuarioService = usuarioService;
+        this.rolService = rolService;
+        this.passwordEncoder = passwordEncoder;
+    }
 
     @GetMapping
-    public List<Usuario> listarUsuarios() {
-        return usuarioService.findAll();
+    public ResponseEntity<ApiResponse<List<UsuarioResponse>>> listar() {
+        List<UsuarioResponse> data = usuarioService.findAll().stream()
+                .map(UsuarioMapper::toResponse)
+                .toList();
+        return ResponseEntity.ok(ApiResponse.ok("Usuarios obtenidos", data));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Usuario> obtenerUsuarioPorId(@PathVariable Long id) {
-        Optional<Usuario> usuario = usuarioService.findById(id);
-        return usuario.map(ResponseEntity::ok) // Si el usuario existe, devuelve 200 OK con el usuario
-                .orElseGet(() -> ResponseEntity.notFound().build()); // Si no, devuelve 404
+    public ResponseEntity<ApiResponse<UsuarioResponse>> obtenerPorId(@PathVariable Long id) {
+        Usuario usuario = usuarioService.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario", id));
+        return ResponseEntity.ok(ApiResponse.ok("Usuario encontrado", UsuarioMapper.toResponse(usuario)));
     }
 
     @PostMapping
-    public Usuario guardarUsuario(@RequestBody Usuario usuario) {
-        return usuarioService.save(usuario);
+    public ResponseEntity<ApiResponse<UsuarioResponse>> crear(@Valid @RequestBody UsuarioRequest req) {
+        Usuario usuario = new Usuario();
+        usuario.setUsername(req.getUsername());
+        usuario.setPassword(passwordEncoder.encode(req.getPassword()));
+        usuario.setRoles(resolverRoles(req.getRoles()));
+        Usuario guardado = usuarioService.save(usuario);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.ok("Usuario creado", UsuarioMapper.toResponse(guardado)));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Usuario> actualizarUsuario(@PathVariable Long id, @RequestBody Usuario usuario) {
-        Optional<Usuario> usuarioExistente = usuarioService.findById(id);
-        if (usuarioExistente.isPresent()) {
-            usuario.setId(id);
-            return ResponseEntity.ok(usuarioService.save(usuario));
+    public ResponseEntity<ApiResponse<UsuarioResponse>> actualizar(@PathVariable Long id,
+                                                                   @Valid @RequestBody UsuarioRequest req) {
+        Usuario existente = usuarioService.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario", id));
+        existente.setUsername(req.getUsername());
+        if (req.getPassword() != null && !req.getPassword().isBlank()) {
+            existente.setPassword(passwordEncoder.encode(req.getPassword()));
         }
-        return ResponseEntity.notFound().build();
+        existente.setRoles(resolverRoles(req.getRoles()));
+        return ResponseEntity.ok(ApiResponse.ok("Usuario actualizado",
+                UsuarioMapper.toResponse(usuarioService.save(existente))));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> eliminarUsuario(@PathVariable Long id) {
-        Optional<Usuario> usuario = usuarioService.findById(id);
-        if (usuario.isPresent()) { // Verifica si el usuario existe
-            usuarioService.deleteById(id); // Elimina al usuario
-            return ResponseEntity.noContent().build(); // Respuesta 204 (sin contenido)
+    public ResponseEntity<ApiResponse<Void>> eliminar(@PathVariable Long id) {
+        if (usuarioService.findById(id).isEmpty()) {
+            throw new ResourceNotFoundException("Usuario", id);
         }
-        return ResponseEntity.notFound().build(); // Respuesta 404 (no encontrado)
+        usuarioService.deleteById(id);
+        return ResponseEntity.ok(ApiResponse.ok("Usuario eliminado", null));
+    }
+
+    /** Resuelve cada nombre de rol a su entidad o lanza 404 si no existe. */
+    private Set<Rol> resolverRoles(Set<String> nombres) {
+        Set<Rol> roles = new HashSet<>();
+        for (String nombre : nombres) {
+            Rol rol = rolService.findByNombre(nombre)
+                    .orElseThrow(() -> new ResourceNotFoundException("Rol no encontrado: " + nombre));
+            roles.add(rol);
+        }
+        return roles;
     }
 }

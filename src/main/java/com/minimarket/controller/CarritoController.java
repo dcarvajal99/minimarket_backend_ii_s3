@@ -1,61 +1,111 @@
 package com.minimarket.controller;
 
+import com.minimarket.dto.ApiResponse;
+import com.minimarket.dto.carrito.CarritoMapper;
+import com.minimarket.dto.carrito.CarritoRequest;
+import com.minimarket.dto.carrito.CarritoResponse;
 import com.minimarket.entity.Carrito;
+import com.minimarket.entity.Producto;
+import com.minimarket.entity.Usuario;
+import com.minimarket.exception.ResourceNotFoundException;
 import com.minimarket.service.CarritoService;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.minimarket.service.ProductoService;
+import com.minimarket.service.UsuarioService;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * API REST del carrito. Trabaja con DTOs (CarritoRequest/CarritoResponse),
+ * delega la logica al servicio y devuelve respuestas uniformes ApiResponse.
+ */
 @RestController
 @RequestMapping("/api/carrito")
 public class CarritoController {
 
-    @Autowired
-    private CarritoService carritoService;
+    private final CarritoService carritoService;
+    private final UsuarioService usuarioService;
+    private final ProductoService productoService;
 
-    // Carrito de compras: operacion del cliente
-    @PreAuthorize("hasAnyRole('ADMIN', 'CLIENTE')")
+    public CarritoController(CarritoService carritoService, UsuarioService usuarioService,
+                            ProductoService productoService) {
+        this.carritoService = carritoService;
+        this.usuarioService = usuarioService;
+        this.productoService = productoService;
+    }
+
+    // Carrito de compras: operacion del cliente.
     @GetMapping
-    public List<Carrito> listarCarrito() {
-        return carritoService.findAll();
+    @PreAuthorize("hasAnyRole('ADMIN', 'CLIENTE')")
+    public ResponseEntity<ApiResponse<List<CarritoResponse>>> listar() {
+        List<CarritoResponse> data = carritoService.findAll().stream()
+                .map(CarritoMapper::toResponse)
+                .toList();
+        return ResponseEntity.ok(ApiResponse.ok("Items del carrito obtenidos", data));
     }
 
-    // Carrito de compras: operacion del cliente
-    @PreAuthorize("hasAnyRole('ADMIN', 'CLIENTE')")
     @GetMapping("/{id}")
-    public ResponseEntity<Carrito> obtenerCarritoPorId(@PathVariable Long id) {
+    @PreAuthorize("hasAnyRole('ADMIN', 'CLIENTE')")
+    public ResponseEntity<ApiResponse<CarritoResponse>> obtenerPorId(@PathVariable Long id) {
         Carrito carrito = carritoService.findById(id);
-        return (carrito != null) ? ResponseEntity.ok(carrito) : ResponseEntity.notFound().build();
+        if (carrito == null) {
+            throw new ResourceNotFoundException("Carrito", id);
+        }
+        return ResponseEntity.ok(ApiResponse.ok("Item del carrito encontrado", CarritoMapper.toResponse(carrito)));
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN', 'CLIENTE')")
     @PostMapping
-    public Carrito agregarProductoAlCarrito(@RequestBody Carrito carrito) {
-        return carritoService.save(carrito);
+    @PreAuthorize("hasAnyRole('ADMIN', 'CLIENTE')")
+    public ResponseEntity<ApiResponse<CarritoResponse>> crear(@Valid @RequestBody CarritoRequest req) {
+        Usuario usuario = resolverUsuario(req.getUsuarioId());
+        Producto producto = resolverProducto(req.getProductoId());
+        Carrito guardado = carritoService.save(CarritoMapper.toEntity(req, usuario, producto));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.ok("Producto agregado al carrito", CarritoMapper.toResponse(guardado)));
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN', 'CLIENTE')")
     @PutMapping("/{id}")
-    public ResponseEntity<Carrito> actualizarCarrito(@PathVariable Long id, @RequestBody Carrito carrito) {
+    @PreAuthorize("hasAnyRole('ADMIN', 'CLIENTE')")
+    public ResponseEntity<ApiResponse<CarritoResponse>> actualizar(@PathVariable Long id,
+                                                                   @Valid @RequestBody CarritoRequest req) {
         Carrito existente = carritoService.findById(id);
-        if (existente != null) {
-            carrito.setId(id);
-            return ResponseEntity.ok(carritoService.save(carrito));
+        if (existente == null) {
+            throw new ResourceNotFoundException("Carrito", id);
         }
-        return ResponseEntity.notFound().build();
+        Usuario usuario = resolverUsuario(req.getUsuarioId());
+        Producto producto = resolverProducto(req.getProductoId());
+        Carrito actualizado = CarritoMapper.toEntity(req, usuario, producto);
+        actualizado.setId(id);
+        return ResponseEntity.ok(ApiResponse.ok("Carrito actualizado",
+                CarritoMapper.toResponse(carritoService.save(actualizado))));
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN', 'CLIENTE')")
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> eliminarProductoDelCarrito(@PathVariable Long id) {
-        Carrito carrito = carritoService.findById(id);
-        if (carrito != null) {
-            carritoService.deleteById(id);
-            return ResponseEntity.noContent().build();
+    @PreAuthorize("hasAnyRole('ADMIN', 'CLIENTE')")
+    public ResponseEntity<ApiResponse<Void>> eliminar(@PathVariable Long id) {
+        if (carritoService.findById(id) == null) {
+            throw new ResourceNotFoundException("Carrito", id);
         }
-        return ResponseEntity.notFound().build();
+        carritoService.deleteById(id);
+        return ResponseEntity.ok(ApiResponse.ok("Producto eliminado del carrito", null));
+    }
+
+    /** Resuelve el usuario por id o lanza 404 si no existe. */
+    private Usuario resolverUsuario(Long usuarioId) {
+        return usuarioService.findById(usuarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario", usuarioId));
+    }
+
+    /** Resuelve el producto por id o lanza 404 si no existe. */
+    private Producto resolverProducto(Long productoId) {
+        Producto producto = productoService.findById(productoId);
+        if (producto == null) {
+            throw new ResourceNotFoundException("Producto", productoId);
+        }
+        return producto;
     }
 }
