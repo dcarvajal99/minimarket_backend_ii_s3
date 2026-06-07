@@ -1,41 +1,87 @@
 package com.minimarket.security.config;
 
+import com.minimarket.security.filter.JwtAuthenticationFilter;
 import com.minimarket.security.service.CustomUserDetailsService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+/**
+ * Configuracion central de Spring Security para una API REST stateless con JWT.
+ *
+ * <p>Decisiones de diseno:
+ * <ul>
+ *     <li><b>Stateless</b>: no se crean sesiones HTTP; la identidad viaja en el token.</li>
+ *     <li><b>Sin formLogin</b>: la autenticacion se realiza por el endpoint
+ *         {@code /api/auth/login}, no por un formulario web.</li>
+ *     <li>El {@link JwtAuthenticationFilter} se ejecuta antes del filtro estandar
+ *         de usuario/contrasena para autenticar a partir del token.</li>
+ *     <li>Autorizacion por roles a nivel de URL y, complementariamente, a nivel
+ *         de metodo via {@code @PreAuthorize} ({@link EnableMethodSecurity}).</li>
+ * </ul>
+ */
 @Configuration
+@EnableMethodSecurity // habilita @PreAuthorize / @PostAuthorize en los controladores
 public class SecurityConfig {
 
     private final CustomUserDetailsService customUserDetailsService;
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
-    public SecurityConfig(CustomUserDetailsService customUserDetailsService) {
+    public SecurityConfig(CustomUserDetailsService customUserDetailsService,
+                          JwtAuthenticationFilter jwtAuthenticationFilter) {
         this.customUserDetailsService = customUserDetailsService;
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .csrf(csrf -> csrf.disable()) // Deshabilita CSRF con la nueva sintaxis
+                // En una API stateless con JWT, CSRF no aplica (no se usan cookies de sesion).
+                .csrf(AbstractHttpConfigurer::disable)
+                // Sin estado de sesion en el servidor: cada peticion se autentica por token.
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/public/**").permitAll() // Permitir acceso público
-                        .anyRequest().authenticated() // Requiere autenticación para el resto
+                        // Endpoints publicos: login y consola H2 (solo desarrollo).
+                        .requestMatchers("/api/auth/**", "/public/**").permitAll()
+                        .requestMatchers("/h2-console/**").permitAll()
+                        // La gestion de usuarios queda reservada al rol ADMIN.
+                        .requestMatchers("/api/usuarios/**").hasRole("ADMIN")
+                        // El resto de la API requiere autenticacion (control fino via @PreAuthorize).
+                        .anyRequest().authenticated()
                 )
-                .formLogin(form -> form
-                        .defaultSuccessUrl("/public/hola", true) // Redirigir después del login
-                )
-                .logout(logout -> logout
-                        .logoutUrl("/logout")
-                        .logoutSuccessUrl("/public/hola")
-                        .permitAll()
-                );
+                // Permite que la consola H2 se renderice dentro de un frame.
+                .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()));
+
+        // Provider de autenticacion basado en BD + BCrypt.
+        http.authenticationProvider(authenticationProvider());
+
+        // Inserta el filtro JWT antes del filtro de usuario/contrasena.
+        http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+
         return http.build();
+    }
+
+    /**
+     * Provider que delega la carga de usuarios en CustomUserDetailsService y
+     * la verificacion de contrasenas en BCryptPasswordEncoder.
+     */
+    @Bean
+    public DaoAuthenticationProvider authenticationProvider() {
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+        provider.setUserDetailsService(customUserDetailsService);
+        provider.setPasswordEncoder(passwordEncoder());
+        return provider;
     }
 
     @Bean
@@ -45,6 +91,6 @@ public class SecurityConfig {
 
     @Bean
     public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder(); // Configuración de encriptación de contraseñas
+        return new BCryptPasswordEncoder(); // hash unidireccional con salt automatico
     }
 }
